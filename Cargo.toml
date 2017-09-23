@@ -1,0 +1,14 @@
+[package]
+name = "shade"
+version = "0.1.0"
+authors = ["Shadowbiz <shadowbizgame@hotmail.com>"]
+
+[dependencies]
+winapi = "*"
+winmm-sys = "*"
+user32-sys = "*"
+kernel32-sys = "*"
+gdi32-sys = "*"
+ole32-sys = "0.2.0"
+comctl32-sys = "0.2.0"
+image = "*"
