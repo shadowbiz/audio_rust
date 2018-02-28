@@ -2,10 +2,30 @@
 
 use std::fs::File;
 use std::io::prelude::*;
-use std::path::Path;
 
 use std::os::windows::ffi::OsStrExt;
 use std::ffi::OsStr;
+
+pub struct BitScanResult {
+    found: bool,
+    index: u32,
+}
+
+#[inline]
+pub fn find_leastsignificant_setbit(value: u32) -> BitScanResult {
+    for t in 0..32 {
+        if value & (1 << t) != 0 {
+            return BitScanResult {
+                found: true,
+                index: t,
+            };
+        }
+    }
+    BitScanResult {
+        found: false,
+        index: 0,
+    }
+}
 
 #[inline(always)]
 pub fn get_index(x: i32, y: i32, width: i32) -> usize {
@@ -50,16 +70,6 @@ pub fn to_gigabytes(bytes: u64) -> u64 {
 #[inline(always)]
 pub fn to_terabytes(bytes: u64) -> u64 {
     to_gigabytes(bytes) / 1024
-}
-
-#[inline(always)]
-pub fn round_f32_to_i32(value: f32) -> i32 {
-    value.round() as i32
-}
-
-#[inline(always)]
-pub fn round_f32_to_u32(value: f32) -> u32 {
-    value.round() as u32
 }
 
 #[inline(always)]

@@ -5,10 +5,13 @@ authors = ["Shadowbiz <shadowbizgame@hotmail.com>"]
 
 [dependencies]
 winapi = "*"
-winmm-sys = "*"
-user32-sys = "*"
 kernel32-sys = "*"
-gdi32-sys = "*"
+user32-sys = "*"
+winmm-sys = "*"
 ole32-sys = "0.2.0"
-comctl32-sys = "0.2.0"
-image = "*"
+gdi32-sys = "*"
+coresimd = "*"
+
+## 
+## 
+## 

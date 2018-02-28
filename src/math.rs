@@ -1,53 +1,47 @@
 #![allow(dead_code)]
 
+const PI: f64 = 3.14159265358979323846;
+
 pub struct Vector2 {
-    x: f64,
-    y: f64,
+    pub x: f64,
+    pub y: f64,
 }
 
 pub struct Vector3 {
-    x: f64,
-    y: f64,
-    z: f64,
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+}
+
+pub struct Rect2i
+{
+    pub min_x: i32,
+    pub min_y: i32,
+    pub max_x: i32,
+    pub max_y: i32,
 }
 
 impl Vector2 {
-    fn zero() -> Self {
-        Vector2 { x: 0.0, y: 0.0 }
-    }
+    const ORIGIN: Vector2 = Vector2 { x: 0.0, y: 0.0 };
+    const ONE: Vector2 = Vector2 { x: 1.0, y: 1.0 };
 
-    fn one() -> Self {
-        Vector2 { x: 1.0, y: 1.0 }
-    }
-
-    fn create(new_x: f64, new_y: f64) -> Self {
+    pub fn new(new_x: f64, new_y: f64) -> Self {
         Vector2 { x: new_x, y: new_y }
     }
+
 }
 
-pub struct BitScanResult {
-    found: bool,
-    index: u32,
-}
-
-#[inline]
-pub fn find_leastsignificant_setbit(value: u32) -> BitScanResult {
-    for t in 0..32 {
-        if value & (1 << t) != 0 {
-            return BitScanResult {
-                found: true,
-                index: t,
-            };
-        }
-    }
-    BitScanResult {
-        found: false,
-        index: 0,
-    }
+impl Vector3 {
+    const ORIGIN: Vector2 = Vector2 { x: 0.0, y: 0.0 };
 }
 
 #[inline(always)]
-pub fn fmax(a: f32, b: f32) -> f32 {
+pub fn deg_to_rad(deg: f64) -> f64 {
+    deg * PI / 180.0
+}
+
+#[inline(always)]
+pub fn fmax(a: f64, b: f64) -> f64 {
     if b <= a {
         a
     } else {
@@ -56,7 +50,7 @@ pub fn fmax(a: f32, b: f32) -> f32 {
 }
 
 #[inline(always)]
-pub fn fmin(a: f32, b: f32) -> f32 {
+pub fn fmin(a: f64, b: f64) -> f64 {
     if b >= a {
         a
     } else {
@@ -99,3 +93,40 @@ pub fn imin(a: i32, b: i32) -> i32 {
         b
     }
 }
+
+#[inline(always)]
+pub fn round_f32_to_i32(value: f32) -> i32 {
+    value.round() as i32
+}
+
+#[inline(always)]
+pub fn round_f64_i32(real32: f64) -> i32 {
+    real32.round() as i32
+}
+
+#[inline(always)]
+pub fn round_f32_to_u32(value: f32) -> u32 {
+    value.round() as u32
+}
+
+#[inline(always)]
+pub fn round_f64_u32(real32 : f64) -> u32 {
+    real32.round() as u32
+}
+
+#[inline(always)]
+pub fn floor_f64_i32(real32 : f64) -> i32 {
+    real32.floor() as i32
+}
+
+#[inline(always)]
+pub fn ceil_f64_i32(real32 : f64) -> i32 {
+    real32.ceil() as i32
+}
+
+#[inline(always)] 
+pub fn truncate_f64_i32(real32 : f64) -> i32 {
+    real32 as i32
+}
+
+

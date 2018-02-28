@@ -174,7 +174,6 @@ pub fn sleep(
     delta_time
 }
 
-
 pub fn get_monitor_refresh_rate(window: &winapi::HWND) -> f64 {
     use winapi::VREFRESH;
     use user32::{GetDC, ReleaseDC};
