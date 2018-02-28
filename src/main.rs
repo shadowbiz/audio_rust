@@ -15,6 +15,7 @@ mod tools;
 mod render;
 mod windows;
 
+use random::*;
 use coresimd::vendor::*;
 use windows::*;
 use render::*;
@@ -36,13 +37,12 @@ struct KeyboardControls {
 
 pub struct Application {
     is_running: bool,
-    pos1: f64,
-    pos2: f64,
     delta_time: f64,
     mouse: MouseControls,
     mouse_start: ScreenPoint,
     keyboard: KeyboardControls,
-    buffer: WindowBuffer,
+    window_buffer: WindowBuffer,
+    sprites: Vec<Sprite>,
 }
 
 fn main() {
@@ -67,12 +67,8 @@ fn main() {
     if window != std::ptr::null_mut() {
         let target_seconds_per_frame = 1.0 / get_monitor_refresh_rate(&window);
 
-        //let buffer: WindowBuffer = unsafe { mem::zeroed() };
-
         let mut app: Box<Application> = Box::new(Application {
             is_running: true,
-            pos1: 0.0,
-            pos2: 0.0,
             delta_time: 0.0,
             mouse: MouseControls {
                 button: [false; 3],
@@ -80,17 +76,48 @@ fn main() {
             },
             mouse_start: ScreenPoint { x: 0, y: 0 },
             keyboard: KeyboardControls { key: [false; 256] },
-            buffer: unsafe { mem::zeroed() },
+            window_buffer: unsafe { mem::zeroed() },
+            sprites: Vec::new(),
         });
 
-        app.buffer.image = Image::from_color(1900, 1200, Color::from_u32(0xFFFF0000));
-        unsafe { SetWindowLongPtrW(window, GWLP_USERDATA, mem::transmute(&app.buffer)) };
+        app.window_buffer.image = Image::from_color(1900, 1200, Color::from_u32(0xFFFF0000));
+        unsafe { SetWindowLongPtrW(window, GWLP_USERDATA, mem::transmute(&app.window_buffer)) };
 
         let (win_width, win_height) = get_window_dimension(window);
-        resize_dib_section(&mut app.buffer, win_width, win_height);
+        resize_dib_section(&mut app.window_buffer, win_width, win_height);
 
         let mut msg: MSG = unsafe { mem::uninitialized() };
         let mut last_counter = unsafe { get_wall_clock() };
+
+        let rect_width = 100;
+        let rect_height = 200;
+
+        for _ in 0..15 {
+            let color_start = Color::random();
+            let color_end = Color::random();
+
+            if random_bool() {
+                app.sprites.push(Sprite {
+                    image: Image::from_horisontal_gradient(
+                        rect_width,
+                        rect_height,
+                        color_start,
+                        color_end,
+                    ),
+                    position: Vector2::ORIGIN,
+                });
+            } else {
+                app.sprites.push(Sprite {
+                    image: Image::from_vectical_gradient(
+                        rect_width,
+                        rect_height,
+                        color_start,
+                        color_end,
+                    ),
+                    position: Vector2::ORIGIN,
+                });
+            }
+        }
 
         while app.is_running {
             let app_cycle_count = unsafe { _rdtsc() };
@@ -112,7 +139,7 @@ fn main() {
                 sleep_is_granular,
             );
 
-            display_buffer_in_window(&app.buffer, &window);
+            display_buffer_in_window(&app.window_buffer, &window);
 
             let end_cycles_elapsed = unsafe { _rdtsc() };
 
@@ -120,13 +147,14 @@ fn main() {
             let render_cycles = end_cycles_elapsed - render_cycle_count;
 
             println!(
-                "CYCLES APP {0}, INPUT OS {1}, INPUT APP {2} RENDER {3}",
+                "CYCLES APP {0}, INPUT OS {1}, INPUT APP {2}, RENDER {3}",
                 app_cycles, os_input_cycles, app_input_cycles, render_cycles
             );
         }
     }
 }
 
+/*
 fn print_debug(cycles: u64, target: f64, delta_time: f64, width: i32, height: i32) {
     println!(
         "Cycles {0} - Target {1:0.4}ms - frame {2:0.4}ms - {3:0.2} FPS,  width {4}, height {5}",
@@ -138,58 +166,24 @@ fn print_debug(cycles: u64, target: f64, delta_time: f64, width: i32, height: i3
         height
     );
 }
+*/
 
 impl Application {
     fn update_and_render(&mut self) {
-        self.pos1 += 10.0 * self.delta_time;
-        self.pos2 += 50.0 * self.delta_time;
+        let window_buffer = &mut self.window_buffer.image;
+        //let width = window_buffer.width;
+        let height = window_buffer.height;
 
-        let image = &mut self.buffer.image;
-        let width = image.width;
-        let height = image.height;
-
-        if self.pos1 > width as f64 {
-            self.pos1 = 0.0;
-        }
-
-        if self.pos2 > width as f64 {
-            self.pos2 = 0.0;
-        }
-
-        let color_start = Color::from_u32(0xFFFF0000);
-        let color_end = Color::from_u32(0xFF00FF00);
-
-        let rect_width = 200;
-        let rect_height = 200;
-
-        let mut rect = Image::new(rect_width, rect_height);
-        
-        rect.draw_gradient_horisontal(
-            Vector2::new(0.0, 0.0),
-            Vector2::new(rect_width as f64, rect_height as f64),
-            color_start,
-            color_end,
-        );
-        
         //Clear BG
-        image.fill(Color::from_u32(0xFF111111));
+        window_buffer.fill(Color::from_u32(0xFF111111));
 
-        image.draw_bitmap(
-            Vector2 {
-                x: self.pos1,
-                y: 0.0,
-            },
-            &rect,
-        );
+        let buffers_count = self.sprites.len();
+        for i in 0..buffers_count {
+            let sprite = &mut self.sprites[i];
 
-        image.draw_rect(
-            Vector2 {
-                x: self.pos2,
-                y: 500.0,
-            },
-            Vector2 { x: 100.0, y: 100.0 },
-            Color::from_u32(0xFFA08563),
-        );
+            sprite.position = Vector2::new(i as f64 * sprite.image.width as f64 * 1.1, 50.0);
+            window_buffer.draw_bitmap(&sprite.position, &sprite.image);
+        }
 
         let mouse = &self.mouse.point;
         let mouse_color = Color::from_u32(0xFFA08563);
@@ -200,7 +194,7 @@ impl Application {
             if mouse_down {
                 let start_x = self.mouse_start.x;
                 if mouse.x < start_x {
-                    image.draw_rect(
+                    window_buffer.draw_rect(
                         Vector2 {
                             x: mouse.x as f64,
                             y: 0.0,
@@ -212,7 +206,7 @@ impl Application {
                         mouse_color,
                     );
                 } else {
-                    image.draw_rect(
+                    window_buffer.draw_rect(
                         Vector2 {
                             x: start_x as f64,
                             y: 0.0,
@@ -225,9 +219,9 @@ impl Application {
                     );
                 }
 
-                image.draw_line(start_x, 0, start_x, height, mouse_fill_color);
+                window_buffer.draw_line(&Vector2::new(start_x as f64, 0.0), &Vector2::new(start_x as f64, height as f64), mouse_fill_color);
             }
-            image.draw_line(mouse.x, 0, mouse.x, height, mouse_fill_color);
+            window_buffer.draw_line(&Vector2::new(mouse.x as f64, 0.0), &Vector2::new(mouse.x as f64, height as f64), mouse_fill_color);
         }
     }
 

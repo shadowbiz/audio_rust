@@ -2,17 +2,20 @@
 
 const PI: f64 = 3.14159265358979323846;
 
+#[derive(Clone, Copy)]
 pub struct Vector2 {
     pub x: f64,
     pub y: f64,
 }
 
+#[derive(Clone, Copy)]
 pub struct Vector3 {
     pub x: f64,
     pub y: f64,
     pub z: f64,
 }
 
+#[derive(Clone, Copy)]
 pub struct Rect2i
 {
     pub min_x: i32,
@@ -22,8 +25,8 @@ pub struct Rect2i
 }
 
 impl Vector2 {
-    const ORIGIN: Vector2 = Vector2 { x: 0.0, y: 0.0 };
-    const ONE: Vector2 = Vector2 { x: 1.0, y: 1.0 };
+    pub const ORIGIN: Vector2 = Vector2 { x: 0.0, y: 0.0 };
+    pub const ONE: Vector2 = Vector2 { x: 1.0, y: 1.0 };
 
     pub fn new(new_x: f64, new_y: f64) -> Self {
         Vector2 { x: new_x, y: new_y }

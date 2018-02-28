@@ -1,5 +1,27 @@
 #[allow(dead_code)]
 
+pub struct Random {
+    pub next_index: usize,
+
+}
+
+impl Random {
+    pub fn next(&mut self) -> u32 {
+        self.next_index = (self.next_index + 1) % RANDOM.len();
+        return RANDOM[self.next_index];
+    }
+}
+
+pub fn random() -> u32 {
+    return unsafe {RANDOMIZER.next()};
+}
+
+pub fn random_bool() -> bool {
+    return unsafe {RANDOMIZER.next() % 2 == 0};
+}
+
+static mut RANDOMIZER: Random = Random { next_index: 0  };
+
 pub static RANDOM: &'static [u32] = &[
     0x4f0143b, 
     0x3402005,

@@ -6,20 +6,13 @@ use std::fs::File;
 use std::path::Path;
 use std::ops::{Add, Div, Sub};
 
+use random::*;
 use tools::*;
 use math::*;
 
 #[derive(Clone, Copy)]
 pub struct Color {
     value: u32,
-}
-
-#[derive(Clone, Copy)]
-pub struct ColorF {
-    r: f64,
-    g: f64,
-    b: f64,
-    a: f64,
 }
 
 pub struct Rect {
@@ -33,6 +26,11 @@ pub struct Image {
     pub width: i32,
     pub height: i32,
     pub color_data: Box<[Color]>,
+}
+
+pub struct Sprite {
+    pub image: Image,
+    pub position: Vector2,
 }
 
 pub struct BitmapHeader {
@@ -60,8 +58,17 @@ pub struct BitmapHeader {
 //#[inline(always)]
 //fn rgba_from_u32(color: u32) -> (u8, u8, u8, u8) {}
 
+
+
 impl Color {
     /// AARRGGBB
+    pub fn random() -> Self {
+        let (r, g, b, _) = separate_to_rgba(random());
+        Color {
+            value: pack_to_argb(r, g, b, 255),
+        }
+    }
+
     pub fn from_u32(color: u32) -> Self {
         Color { value: color }
     }
@@ -127,6 +134,107 @@ impl Image {
         }
     }
 
+    pub fn from_horisontal_gradient(
+        width: i32,
+        height: i32,
+        color_start: Color,
+        color_end: Color,
+    ) -> Image {
+        let color = Color::from_u32(0xFFFFFFFF);
+        let mut data = vec![color; width as usize * height as usize].into_boxed_slice();
+
+        let row_len = width;
+
+        let start_y = 0;
+        let end_y = height;
+
+        let (r_s, g_s, b_s, _) = color_start.separate_to_rgba();
+        let (r_e, g_e, b_e, _) = color_end.separate_to_rgba();
+
+        let r_range = (r_e as f64 - r_s as f64) as f64;
+        let g_range = (g_e as f64 - g_s as f64) as f64;
+        let b_range = (b_e as f64 - b_s as f64) as f64;
+
+        let r_step = r_range / (height as f64);
+        let g_step = g_range / (height as f64);
+        let b_step = b_range / (height as f64);
+
+        let mut r_new = r_s as f64;
+        let mut g_new = g_s as f64;
+        let mut b_new = b_s as f64;
+
+        for y in start_y..end_y {
+            let color = Color::from_rgb(
+                round_f64_u32(r_new),
+                round_f64_u32(g_new),
+                round_f64_u32(b_new),
+            );
+
+            unsafe {
+                let offset = get_index(0, y, width) as isize;
+                let destination = data.as_mut_ptr().offset(offset) as *mut u32;
+                fast_set32(destination, color.value, row_len as usize);
+            }
+
+            r_new = r_new + r_step;
+            g_new = g_new + g_step;
+            b_new = b_new + b_step;
+
+            r_new = fmin(255.0, fmax(0.0, r_new));
+            g_new = fmin(255.0, fmax(0.0, g_new));
+            b_new = fmin(255.0, fmax(0.0, b_new));
+        }
+
+        Image::from_data(width, height, data)
+    }
+
+    pub fn from_vectical_gradient(
+        width: i32,
+        height: i32,
+        color_start: Color,
+        color_end: Color,
+    ) -> Image {
+        let color = Color::from_u32(0xFFFFFFFF);
+        let mut data = vec![color; width as usize * height as usize].into_boxed_slice();
+
+        let (r_s, g_s, b_s, _) = color_start.separate_to_rgba();
+        let (r_e, g_e, b_e, _) = color_end.separate_to_rgba();
+
+        let r_range = (r_e as f64 - r_s as f64) as f64;
+        let g_range = (g_e as f64 - g_s as f64) as f64;
+        let b_range = (b_e as f64 - b_s as f64) as f64;
+
+        let r_step = r_range / (width as f64);
+        let g_step = g_range / (width as f64);
+        let b_step = b_range / (width as f64);
+
+        let mut r_new = r_s as f64;
+        let mut g_new = g_s as f64;
+        let mut b_new = b_s as f64;
+
+        for x in 0..width {
+            let color = Color::from_rgb(
+                round_f64_u32(r_new),
+                round_f64_u32(g_new),
+                round_f64_u32(b_new),
+            );
+            for y in 0..height {
+                let offset = get_index(x, y, width);
+                data[offset] = color;
+            }
+
+            r_new = r_new + r_step;
+            g_new = g_new + g_step;
+            b_new = b_new + b_step;
+
+            r_new = fmin(255.0, fmax(0.0, r_new));
+            g_new = fmin(255.0, fmax(0.0, g_new));
+            b_new = fmin(255.0, fmax(0.0, b_new));
+        }
+
+        Image::from_data(width, height, data)
+    }
+
     pub fn fill(&mut self, color: Color) {
         let data = &mut self.color_data[..];
         let destination = data.as_mut_ptr() as *mut u32;
@@ -173,7 +281,13 @@ impl Image {
         }
     }
 
-    pub fn draw_line(&mut self, argx1: i32, argy1: i32, argx2: i32, argy2: i32, color: Color) {
+    pub fn draw_line(&mut self, start: &Vector2, end: &Vector2, color: Color) {
+        
+        let argx1 = round_f64_i32(start.x);
+        let argy1 = round_f64_i32(start.y);
+        let argx2 = round_f64_i32(end.x);
+        let argy2 = round_f64_i32(end.y);
+        
         let mut x = argx1;
         let mut y = argy1;
 
@@ -214,12 +328,12 @@ impl Image {
         }
     }
 
-    pub fn draw_bitmap(&mut self, v_min: Vector2, image: &Image) {
+    pub fn draw_bitmap(&mut self, position: &Vector2, image: &Image) {
         let self_width = self.width;
         let self_height = self.height;
 
-        let x = round_f64_i32(v_min.x);
-        let y = round_f64_i32(v_min.y);
+        let x = round_f64_i32(position.x);
+        let y = round_f64_i32(position.y);
 
         let source_width = image.width;
         let source_height = image.height;
@@ -237,11 +351,11 @@ impl Image {
 
         for y in start_y..end_y {
             for x in start_x..end_x {
-                let source_offset = (source_y * source_width + source_x) as usize;
+                let source_offset = get_index(source_x, source_y, source_width);
                 let source = image.color_data[source_offset].value;
                 let source_a = (source >> 24) & 0xFF;
                 if source_a > 0 {
-                    let dest_offset = (y * self_width + x) as usize;
+                    let dest_offset = get_index(x, y, self_width);
                     let destination = &mut dest_data[dest_offset].value;
                     *destination = source;
                 }
@@ -249,67 +363,6 @@ impl Image {
             }
             source_x = 0;
             source_y = source_y + 1;
-        }
-    }
-
-    pub fn draw_gradient_horisontal(
-        &mut self,
-        v_min: Vector2,
-        v_max: Vector2,
-        color_start: Color,
-        color_end: Color,
-    ) {
-        let self_width = self.width;
-        let self_height = self.height;
-
-        let x = round_f64_i32(v_min.x);
-        let y = round_f64_i32(v_min.y);
-
-        let width = round_f64_i32(v_max.x);
-        let height = round_f64_i32(v_max.y);
-
-        let start_y = imax(0, imin(self_width - 1, y));
-        let end_y = imax(start_y, imin(self_height, y + height));
-
-        let start_x = imax(0, imin(self_width - 1, x));
-        let row_len = imax(start_x, imin(self_width, x + width)) - start_x;
-
-        let (r_s, g_s, b_s, _) = color_start.separate_to_rgba();
-        let (r_e, g_e, b_e, _) = color_end.separate_to_rgba();
-
-        let r_range = (r_e as f64 - r_s as f64) as f64;
-        let g_range = (g_e as f64 - g_s as f64) as f64;
-        let b_range = (b_e as f64 - b_s as f64) as f64;
-
-        let r_step = r_range / (height as f64);
-        let g_step = g_range / (height as f64);
-        let b_step = b_range / (height as f64);
-
-        let mut r_new = r_s as f64;
-        let mut g_new = g_s as f64;
-        let mut b_new = b_s as f64;
-
-        let data = &mut self.color_data[..];
-        for y in start_y..end_y {
-            let color = Color::from_rgb(
-                round_f64_u32(r_new),
-                round_f64_u32(g_new),
-                round_f64_u32(b_new),
-            );
-
-            unsafe {
-                let offset = (y * self_width + start_x) as isize;
-                let destination = data.as_mut_ptr().offset(offset) as *mut u32;
-                fast_set32(destination, color.value, row_len as usize);
-            }
-
-            r_new = r_new + r_step;
-            g_new = g_new + g_step;
-            b_new = b_new + b_step;
-
-            r_new = fmin(255.0, fmax(0.0, r_new));
-            g_new = fmin(255.0, fmax(0.0, g_new));
-            b_new = fmin(255.0, fmax(0.0, b_new));
         }
     }
 
@@ -335,7 +388,7 @@ impl Image {
                 let data = &mut self.color_data[..];
                 for y in start_y..end_y {
                     unsafe {
-                        let offset = (y * self_width + start_x) as isize;
+                        let offset = get_index(x, y, self_width) as isize;
                         let destination = data.as_mut_ptr().offset(offset) as *mut u32;
                         fast_set32(destination, color.value, row_len as usize);
                     }
