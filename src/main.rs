@@ -164,7 +164,7 @@ impl Application {
 
         let mut rect = Image::new(rect_width, rect_height);
         
-        rect.rect_gradient_horisontal(
+        rect.draw_gradient_horisontal(
             Vector2::new(0.0, 0.0),
             Vector2::new(rect_width as f64, rect_height as f64),
             color_start,
@@ -182,7 +182,7 @@ impl Application {
             &rect,
         );
 
-        image.rect(
+        image.draw_rect(
             Vector2 {
                 x: self.pos2,
                 y: 500.0,
@@ -192,40 +192,42 @@ impl Application {
         );
 
         let mouse = &self.mouse.point;
+        let mouse_color = Color::from_u32(0xFFA08563);
+        let mouse_fill_color = Color::from_u32(0xFF880000);
 
         if mouse.y <= 700 {
             let mouse_down = self.mouse.button[0];
             if mouse_down {
                 let start_x = self.mouse_start.x;
                 if mouse.x < start_x {
-                    image.rect(
+                    image.draw_rect(
                         Vector2 {
-                            x: mouse.x.into(),
+                            x: mouse.x as f64,
                             y: 0.0,
                         },
                         Vector2 {
-                            x: (start_x - mouse.x).into(),
+                            x: (start_x - mouse.x) as f64,
                             y: height as f64,
                         },
-                        Color::from_u32(0xFFA08563),
+                        mouse_color,
                     );
                 } else {
-                    image.rect(
+                    image.draw_rect(
                         Vector2 {
-                            x: start_x.into(),
+                            x: start_x as f64,
                             y: 0.0,
                         },
                         Vector2 {
-                            x: (mouse.x - start_x).into(),
+                            x: (mouse.x - start_x) as f64,
                             y: height as f64,
                         },
-                        Color::from_u32(0xFFA08563),
+                        mouse_color,
                     );
                 }
 
-                image.line(start_x, 0, start_x, height, Color::from_u32(0xFF880000));
+                image.draw_line(start_x, 0, start_x, height, mouse_fill_color);
             }
-            image.line(mouse.x, 0, mouse.x, height, Color::from_u32(0xFF880000));
+            image.draw_line(mouse.x, 0, mouse.x, height, mouse_fill_color);
         }
     }
 

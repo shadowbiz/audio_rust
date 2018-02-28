@@ -127,7 +127,7 @@ impl Image {
         }
     }
 
-    pub fn set(&mut self, color: Color) {
+    pub fn fill(&mut self, color: Color) {
         let data = &mut self.color_data[..];
         let destination = data.as_mut_ptr() as *mut u32;
         unsafe {
@@ -136,11 +136,7 @@ impl Image {
     }
 
     pub fn clear(&mut self) {
-        self.set(Color::from_u32(0xFF00000));
-    }
-
-    pub fn fill(&mut self, color: Color) {
-        self.set(color);
+        self.fill(Color::from_u32(0xFF00000));
     }
 
     #[inline]
@@ -173,11 +169,11 @@ impl Image {
             let res_g = (fg_g * fg_a + bg_g * bg_a) >> 8;
             let res_b = (fg_b * fg_a + bg_b * bg_a) >> 8;
 
-            *bg_pixel = pack_to_argb(res_r, res_g, res_b, 0xFF00000);
+            *bg_pixel = pack_to_argb(res_r, res_g, res_b, 255);
         }
     }
 
-    pub fn line(&mut self, argx1: i32, argy1: i32, argx2: i32, argy2: i32, color: Color) {
+    pub fn draw_line(&mut self, argx1: i32, argy1: i32, argx2: i32, argy2: i32, color: Color) {
         let mut x = argx1;
         let mut y = argy1;
 
@@ -256,7 +252,7 @@ impl Image {
         }
     }
 
-    pub fn rect_gradient_horisontal(
+    pub fn draw_gradient_horisontal(
         &mut self,
         v_min: Vector2,
         v_max: Vector2,
@@ -317,7 +313,7 @@ impl Image {
         }
     }
 
-    pub fn rect(&mut self, v_min: Vector2, v_max: Vector2, color: Color) {
+    pub fn draw_rect(&mut self, v_min: Vector2, v_max: Vector2, color: Color) {
         let self_width = self.width;
         let self_height = self.height;
 
