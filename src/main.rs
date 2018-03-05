@@ -10,16 +10,18 @@ extern crate winmm;
 use std::mem;
 
 mod math;
+mod audio;
 mod random;
 mod tools;
 mod render;
 mod windows;
 
-use random::*;
-use coresimd::vendor::*;
+use audio::*;
+//use coresimd::vendor::*;
 use windows::*;
 use render::*;
 use math::*;
+//use random::*;
 
 struct ScreenPoint {
     x: i32,
@@ -32,7 +34,7 @@ struct MouseControls {
 }
 
 struct KeyboardControls {
-    key: [bool; 256],
+    key: [bool; 512],
 }
 
 pub struct Application {
@@ -42,7 +44,9 @@ pub struct Application {
     mouse_start: ScreenPoint,
     keyboard: KeyboardControls,
     window_buffer: WindowBuffer,
-    sprites: Vec<Sprite>,
+    background: Sprite,
+    sprites: Vec<Box<Sprite>>,
+    wave: Waveform,
 }
 
 fn main() {
@@ -75,12 +79,19 @@ fn main() {
                 point: ScreenPoint { x: 0, y: 0 },
             },
             mouse_start: ScreenPoint { x: 0, y: 0 },
-            keyboard: KeyboardControls { key: [false; 256] },
+            keyboard: KeyboardControls { key: [false; 512] },
             window_buffer: unsafe { mem::zeroed() },
+            background: unsafe { mem::zeroed() },
             sprites: Vec::new(),
+            wave: unsafe { mem::zeroed() },
         });
 
-        app.window_buffer.image = Image::from_color(1900, 1200, Color::from_u32(0xFFFF0000));
+        app.window_buffer = WindowBuffer {
+            image: Image::from_color(1900, 1200, Color::from_u32(0xFFFF0000)),
+            resized: true,
+            info: unsafe { mem::zeroed() },
+        };
+
         unsafe { SetWindowLongPtrW(window, GWLP_USERDATA, mem::transmute(&app.window_buffer)) };
 
         let (win_width, win_height) = get_window_dimension(window);
@@ -89,47 +100,61 @@ fn main() {
         let mut msg: MSG = unsafe { mem::uninitialized() };
         let mut last_counter = unsafe { get_wall_clock() };
 
-        let rect_width = 100;
-        let rect_height = 200;
+        app.background = Sprite {
+            image: (Image::from_color(
+                win_width,
+                win_height,
+                Color::from_u32(Colors::White as u32),
+            )),
+            position: Vector2::ORIGIN,
+            layer: LayerID::Base,
+            need_update: false,
+            children: Vec::new(),
+        };
 
-        for _ in 0..15 {
-            let color_start = Color::random();
-            let color_end = Color::random();
+        let bg = Box::new(Sprite {
+            image: (Image::from_color(
+                win_width,
+                win_height,
+                Color::from_u32(Colors::DarkGrey as u32),
+            )),
+            position: Vector2::new(0.0, 50.0),
+            layer: LayerID::Background,
+            need_update: true,
+            children: Vec::new(),
+        });
 
-            if random_bool() {
-                app.sprites.push(Sprite {
-                    image: Image::from_horisontal_gradient(
-                        rect_width,
-                        rect_height,
-                        color_start,
-                        color_end,
-                    ),
-                    position: Vector2::ORIGIN,
-                });
-            } else {
-                app.sprites.push(Sprite {
-                    image: Image::from_vectical_gradient(
-                        rect_width,
-                        rect_height,
-                        color_start,
-                        color_end,
-                    ),
-                    position: Vector2::ORIGIN,
-                });
-            }
-        }
+        //let waveform = Waveform::noise(100);
+        let waveform = Waveform::osc(400.0, 400, 44100.0);
+
+        let wave_sprite = Box::new(Sprite {
+            image: (Image::from_color(
+                win_width,
+                win_height,
+                Color::from_u32(Colors::Amber as u32),
+            )),
+            position: Vector2::ORIGIN,
+            layer: LayerID::Wave,
+            need_update: true,
+            children: Vec::new(),
+        });
+
+        app.sprites.push(bg);
+        app.sprites.push(wave_sprite);
+
+        app.wave = waveform;
 
         while app.is_running {
-            let app_cycle_count = unsafe { _rdtsc() };
+            //let app_cycle_count = unsafe { _rdtsc() };
 
             let input = process_pending_messages(&mut msg);
-            let os_input_cycles = unsafe { _rdtsc() } - app_cycle_count;
+            //let os_input_cycles = unsafe { _rdtsc() } - app_cycle_count;
 
-            let mut app_input_cycles = unsafe { _rdtsc() };
+            //let mut app_input_cycles = unsafe { _rdtsc() };
             app.process_input(input);
-            app_input_cycles = unsafe { _rdtsc() } - app_input_cycles;
+            //app_input_cycles = unsafe { _rdtsc() } - app_input_cycles;
 
-            let render_cycle_count = unsafe { _rdtsc() };
+            // let render_cycle_count = unsafe { _rdtsc() };
             app.update_and_render();
 
             app.delta_time = sleep(
@@ -141,15 +166,15 @@ fn main() {
 
             display_buffer_in_window(&app.window_buffer, &window);
 
-            let end_cycles_elapsed = unsafe { _rdtsc() };
+            //let end_cycles_elapsed = unsafe { _rdtsc() };
 
-            let app_cycles = end_cycles_elapsed - app_cycle_count;
-            let render_cycles = end_cycles_elapsed - render_cycle_count;
+            //let app_cycles = end_cycles_elapsed - app_cycle_count;
+            //let render_cycles = end_cycles_elapsed - render_cycle_count;
 
-            println!(
-                "CYCLES APP {0}, INPUT OS {1}, INPUT APP {2}, RENDER {3}",
-                app_cycles, os_input_cycles, app_input_cycles, render_cycles
-            );
+            // println!(
+            //     "CYCLES APP {0}, INPUT OS {1}, INPUT APP {2}, RENDER {3}",
+            //     app_cycles, os_input_cycles, app_input_cycles, render_cycles
+            // );
         }
     }
 }
@@ -170,58 +195,94 @@ fn print_debug(cycles: u64, target: f64, delta_time: f64, width: i32, height: i3
 
 impl Application {
     fn update_and_render(&mut self) {
-        let window_buffer = &mut self.window_buffer.image;
-        //let width = window_buffer.width;
-        let height = window_buffer.height;
+        let window_buffer = &mut self.window_buffer;
+        let width = window_buffer.image.width;
+        let height = window_buffer.image.height;
 
-        //Clear BG
-        window_buffer.fill(Color::from_u32(0xFF111111));
+        window_buffer.image.clear();
 
-        let buffers_count = self.sprites.len();
-        for i in 0..buffers_count {
-            let sprite = &mut self.sprites[i];
+        let sprites = &mut self.sprites;
 
-            sprite.position = Vector2::new(i as f64 * sprite.image.width as f64 * 1.1, 50.0);
-            window_buffer.draw_bitmap(&sprite.position, &sprite.image);
+        let buffers_count = sprites.len();
+        if window_buffer.resized == true {
+            let bg = Image::from_color(width, height, Color::from_u32(Colors::White as u32));
+            self.background.image = bg;
+            window_buffer.resized = false;
+            for i in 0..buffers_count {
+                sprites[i].need_update = true;
+                if sprites[i].position.x < width as f64 && sprites[i].position.y < height as f64 {
+                    match sprites[i].layer {
+                        LayerID::Background => {
+                            let mut bg = Image::from_color(
+                                width,
+                                height,
+                                Color::from_u32(Colors::DarkGrey as u32),
+                            );
+                            bg.draw_line(
+                                &Vector2::new(0.0, height as f64 / 2.0),
+                                &Vector2::new(width as f64, height as f64 / 2.0),
+                                Color::from_u32(Colors::Amber as u32),
+                            );
+                            sprites[i].image = bg;
+                        }
+                        LayerID::Wave => {
+                            let wave_image = Image::waveform(
+                                width,
+                                height,
+                                &self.wave,
+                                Color::from_u32(Colors::Amber as u32),
+                            );
+                            sprites[i].image = wave_image;
+                        }
+                        _ => {}
+                    }
+                    self.background.image.draw_bitmap(&sprites[i]);
+                    sprites[i].need_update = false;
+                }
+            }
         }
 
+        window_buffer.image.draw_bitmap(&self.background);
+
         let mouse = &self.mouse.point;
-        let mouse_color = Color::from_u32(0xFFA08563);
-        let mouse_fill_color = Color::from_u32(0xFF880000);
+        let mouse_fill_color = Color::from_u32(0x55A08563);
+        let mouse_line_color = Color::from_u32(0xFF880000);
 
         if mouse.y <= 700 {
             let mouse_down = self.mouse.button[0];
             if mouse_down {
                 let start_x = self.mouse_start.x;
                 if mouse.x < start_x {
-                    window_buffer.draw_rect(
-                        Vector2 {
+                    window_buffer.image.draw_rect(
+                        &Vector2 {
                             x: mouse.x as f64,
                             y: 0.0,
                         },
-                        Vector2 {
+                        &Vector2 {
                             x: (start_x - mouse.x) as f64,
-                            y: height as f64,
+                            y: 600.0,
                         },
-                        mouse_color,
+                        mouse_fill_color,
                     );
                 } else {
-                    window_buffer.draw_rect(
-                        Vector2 {
+                    window_buffer.image.draw_rect(
+                        &Vector2 {
                             x: start_x as f64,
                             y: 0.0,
                         },
-                        Vector2 {
+                        &Vector2 {
                             x: (mouse.x - start_x) as f64,
-                            y: height as f64,
+                            y: 600.0,
                         },
-                        mouse_color,
+                        mouse_fill_color,
                     );
                 }
-
-                window_buffer.draw_line(&Vector2::new(start_x as f64, 0.0), &Vector2::new(start_x as f64, height as f64), mouse_fill_color);
             }
-            window_buffer.draw_line(&Vector2::new(mouse.x as f64, 0.0), &Vector2::new(mouse.x as f64, height as f64), mouse_fill_color);
+            window_buffer.image.draw_line(
+                &Vector2::new(mouse.x as f64, 0.0),
+                &Vector2::new(mouse.x as f64, 600.0),
+                mouse_line_color,
+            );
         }
     }
 

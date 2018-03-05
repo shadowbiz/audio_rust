@@ -28,6 +28,13 @@ pub fn find_leastsignificant_setbit(value: u32) -> BitScanResult {
 }
 
 #[inline(always)]
+pub fn change_bytes(value: u32, bits: u32, new_value: u32) -> u32 {
+    let shift = new_value << (8 * bits);
+    let mask = 0xFF << shift;
+    return (!mask & value) | shift;
+}
+
+#[inline(always)]
 pub fn get_index(x: i32, y: i32, width: i32) -> usize {
     (y * width + x) as usize
 }
@@ -95,13 +102,15 @@ pub unsafe fn fast_set32(dst: *mut u32, src: u32, len: usize) {
 #[cfg(target_arch = "x86_64")]
 #[inline(always)]
 #[cold]
-pub unsafe fn fast_set32(dst: *mut u32, src: u32, len: usize) {
-    asm!("cld
+pub fn fast_set32(dst: *mut u32, src: u32, len: usize) {
+    unsafe {
+        asm!("cld
         rep stosd"
         :
         : "{rdi}"(dst as usize), "{eax}"(src), "{rcx}"(len)
         : "cc", "memory", "rdi", "rcx"
         : "intel", "volatile");
+    }
 }
 
 pub fn read_file() -> Vec<u8> {

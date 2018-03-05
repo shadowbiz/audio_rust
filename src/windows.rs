@@ -55,8 +55,8 @@ pub enum Message {
 pub struct WindowBuffer {
     pub info: winapi::BITMAPINFO,
     pub image: Image,
+    pub resized: bool,
 }
-
 
 pub unsafe extern "system" fn window_proc(
     window: winapi::HWND,
@@ -64,9 +64,8 @@ pub unsafe extern "system" fn window_proc(
     w_param: winapi::WPARAM,
     l_param: winapi::LPARAM,
 ) -> winapi::LRESULT {
-    use winapi::{GWLP_USERDATA, WM_DESTROY, WM_PAINT, WM_SIZE};
-    use user32::{DefWindowProcW, GetWindowLongPtrW, PostQuitMessage};
-
+    use winapi::{GWLP_USERDATA, WM_CLOSE, WM_COMMAND, WM_CREATE, WM_DESTROY, WM_PAINT, WM_SIZE};
+    use user32::{DefWindowProcW, GetWindowLongPtrW, PostQuitMessage, SendMessageW};
     let user_data = GetWindowLongPtrW(window, GWLP_USERDATA);
 
     if user_data == 0 {
@@ -78,6 +77,11 @@ pub unsafe extern "system" fn window_proc(
     match msg {
         WM_DESTROY => {
             PostQuitMessage(0);
+        }
+
+        WM_CREATE => {
+            println!("WM_CREATE");
+            create_menus(window);
         }
 
         WM_SIZE => {
@@ -94,10 +98,42 @@ pub unsafe extern "system" fn window_proc(
             //EndPaint(window, &paint);
         }
 
+        WM_COMMAND => {
+            let low = (w_param as i32) & 0xffff;
+            match low {
+                2 => {
+                    SendMessageW(window, WM_CLOSE, 0, 0);
+                }
+                _ => {}
+            }
+        }
+
         _ => (),
     }
 
-    return DefWindowProcW(window, msg, w_param, l_param);
+    DefWindowProcW(window, msg, w_param, l_param)
+}
+
+fn create_menus(window: winapi::HWND) {
+    use winapi::{MF_SEPARATOR, MF_STRING};
+    use user32::{AppendMenuW, CreateMenu, SetMenu};
+    unsafe {
+        //let menu_bar = CreateMenu();
+        let menu = CreateMenu();
+
+        let new_str = to_wstring("&New");
+        let quit_str = to_wstring("&Quit");
+
+        AppendMenuW(menu, MF_STRING, 0, new_str.as_ptr());
+        //AppendMenuW(hMenu, MF_STRING, 1, to_wstring("&Open").as_ptr());
+        AppendMenuW(menu, MF_SEPARATOR, 0, ptr::null_mut());
+        AppendMenuW(menu, MF_STRING, 2, quit_str.as_ptr());
+
+        //AppendMenuW(hMenubar, 3, hMenu, to_wstring("&File").as_ptr());
+
+        //SetMenu(result, menu_bar);
+        SetMenu(window, menu);
+    }
 }
 
 unsafe fn hide_console_window() {
@@ -115,6 +151,8 @@ unsafe fn hide_console_window() {
 pub fn resize_dib_section(buffer: &mut WindowBuffer, width: i32, height: i32) {
     println!("RESIZE {0}, {1}", width, height);
     use winapi::{BITMAPINFOHEADER, BI_RGB};
+
+    buffer.resized = true;
 
     buffer.image.width = width;
     buffer.image.height = height;
@@ -194,6 +232,7 @@ pub fn get_monitor_refresh_rate(window: &winapi::HWND) -> f64 {
 
 pub unsafe fn enable_com() {
     use winapi::{COINIT_DISABLE_OLE1DDE, COINIT_APARTMENTTHREADED};
+
     use windows::ole32::CoInitializeEx;
     CoInitializeEx(
         ptr::null_mut(),
@@ -203,10 +242,10 @@ pub unsafe fn enable_com() {
 
 pub unsafe fn create_window(class_name: String, window_name: String) -> winapi::HWND {
     use winapi::{CS_HREDRAW, CS_VREDRAW, CW_USEDEFAULT, HBRUSH, HINSTANCE, IDI_APPLICATION,
-                 WNDCLASSEXW, WS_OVERLAPPEDWINDOW, WS_VISIBLE};
-    use kernel32::GetModuleHandleW;
+                 WNDCLASSEXW, WS_OVERLAPPEDWINDOW, WS_SYSMENU, WS_VISIBLE};
     use user32::{CreateWindowExW, RegisterClassExW};
 
+    use kernel32::GetModuleHandleW;
     hide_console_window();
 
     let class_name = to_wstring(&class_name);
@@ -240,7 +279,7 @@ pub unsafe fn create_window(class_name: String, window_name: String) -> winapi::
         0,
         class_name.as_ptr(),
         window_name.as_ptr(),
-        WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+        WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_SYSMENU,
         CW_USEDEFAULT,
         CW_USEDEFAULT,
         CW_USEDEFAULT,
@@ -250,6 +289,8 @@ pub unsafe fn create_window(class_name: String, window_name: String) -> winapi::
         ptr::null_mut(),
         ptr::null_mut(),
     );
+
+    create_menus(result);
 
     enable_com();
     result
@@ -270,12 +311,8 @@ pub fn process_pending_messages(message: &mut winapi::MSG) -> Message {
                 WM_SYSKEYUP => return Message::KeyUp(message.wParam as u32),
                 WM_KEYDOWN => return Message::KeyDown(message.wParam as u32),
                 WM_KEYUP => return Message::KeyUp(message.wParam as u32),
-                WM_LBUTTONUP |
-                WM_RBUTTONUP |
-                WM_MBUTTONUP |
-                WM_LBUTTONDOWN |
-                WM_RBUTTONDOWN |
-                WM_MBUTTONDOWN => {
+                WM_LBUTTONUP | WM_RBUTTONUP | WM_MBUTTONUP | WM_LBUTTONDOWN | WM_RBUTTONDOWN
+                | WM_MBUTTONDOWN => {
                     return parse_mouse_click(message.message, message.lParam);
                 }
                 WM_MOUSEMOVE => {
