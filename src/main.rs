@@ -47,6 +47,7 @@ pub struct Application {
     background: Sprite,
     sprites: Vec<Box<Sprite>>,
     wave: Waveform,
+    position: u32,
 }
 
 fn main() {
@@ -84,6 +85,7 @@ fn main() {
             background: unsafe { mem::zeroed() },
             sprites: Vec::new(),
             wave: unsafe { mem::zeroed() },
+            position: 0,
         });
 
         app.window_buffer = WindowBuffer {
@@ -115,7 +117,7 @@ fn main() {
         let bg = Box::new(Sprite {
             image: (Image::from_color(
                 win_width,
-                win_height,
+                win_height - 100,
                 Color::from_u32(Colors::DarkGrey as u32),
             )),
             position: Vector2::new(0.0, 50.0),
@@ -124,16 +126,16 @@ fn main() {
             children: Vec::new(),
         });
 
-        //let waveform = Waveform::noise(100);
-        let waveform = Waveform::osc(400.0, 400, 44100.0);
+        let waveform = Waveform::noise(20000, 44100.0);
+        //let waveform = Waveform::osc(400.0, 4000, 44100.0);
 
         let wave_sprite = Box::new(Sprite {
             image: (Image::from_color(
                 win_width,
-                win_height,
+                win_height - 100,
                 Color::from_u32(Colors::Amber as u32),
             )),
-            position: Vector2::ORIGIN,
+            position: Vector2::new(0.0, 50.0),
             layer: LayerID::Wave,
             need_update: true,
             children: Vec::new(),
@@ -203,43 +205,52 @@ impl Application {
 
         let sprites = &mut self.sprites;
 
+        let buffer_length = 500;
+
         let buffers_count = sprites.len();
         if window_buffer.resized == true {
-            let bg = Image::from_color(width, height, Color::from_u32(Colors::White as u32));
+            let bg = Image::from_color(width, height, Color::from_u32(Colors::Black as u32));
             self.background.image = bg;
             window_buffer.resized = false;
             for i in 0..buffers_count {
                 sprites[i].need_update = true;
+            }
+        }
+
+        for i in 0..buffers_count {
+            if sprites[i].need_update {
                 if sprites[i].position.x < width as f64 && sprites[i].position.y < height as f64 {
                     match sprites[i].layer {
                         LayerID::Background => {
                             let mut bg = Image::from_color(
                                 width,
-                                height,
+                                height - 100,
                                 Color::from_u32(Colors::DarkGrey as u32),
                             );
-                            bg.draw_line(
-                                &Vector2::new(0.0, height as f64 / 2.0),
-                                &Vector2::new(width as f64, height as f64 / 2.0),
-                                Color::from_u32(Colors::Amber as u32),
-                            );
                             sprites[i].image = bg;
+                            sprites[i].need_update = true;
                         }
                         LayerID::Wave => {
                             let wave_image = Image::waveform(
                                 width,
-                                height,
+                                height - 100,
                                 &self.wave,
+                                self.position,
+                                buffer_length,
                                 Color::from_u32(Colors::Amber as u32),
                             );
                             sprites[i].image = wave_image;
+                            sprites[i].need_update = true;
                         }
                         _ => {}
                     }
                     self.background.image.draw_bitmap(&sprites[i]);
-                    sprites[i].need_update = false;
                 }
             }
+        }
+
+        if self.position < self.wave.sample_count as u32 - buffer_length {
+            self.position += 1;
         }
 
         window_buffer.image.draw_bitmap(&self.background);
@@ -256,11 +267,11 @@ impl Application {
                     window_buffer.image.draw_rect(
                         &Vector2 {
                             x: mouse.x as f64,
-                            y: 0.0,
+                            y: 50.0,
                         },
                         &Vector2 {
                             x: (start_x - mouse.x) as f64,
-                            y: 600.0,
+                            y: height as f64 - 100.0,
                         },
                         mouse_fill_color,
                     );
@@ -268,19 +279,19 @@ impl Application {
                     window_buffer.image.draw_rect(
                         &Vector2 {
                             x: start_x as f64,
-                            y: 0.0,
+                            y: 50.0,
                         },
                         &Vector2 {
                             x: (mouse.x - start_x) as f64,
-                            y: 600.0,
+                            y: height as f64 - 100.0,
                         },
                         mouse_fill_color,
                     );
                 }
             }
             window_buffer.image.draw_line(
-                &Vector2::new(mouse.x as f64, 0.0),
-                &Vector2::new(mouse.x as f64, 600.0),
+                &Vector2::new(mouse.x as f64, 50.0),
+                &Vector2::new(mouse.x as f64, height as f64 - 50.0),
                 mouse_line_color,
             );
         }

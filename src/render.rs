@@ -89,12 +89,6 @@ impl Color {
         Color { value: color }
     }
 
-    pub fn from_rgb(r: u32, g: u32, b: u32) -> Self {
-        Color {
-            value: pack_to_argb(r, g, b, 255),
-        }
-    }
-
     pub fn from_rgba(r: u32, g: u32, b: u32, a: u32) -> Self {
         Color {
             value: pack_to_argb(r, g, b, a),
@@ -105,28 +99,16 @@ impl Color {
         return separate_to_rgba(self.value);
     }
 
+    pub fn separate_f32(self) -> (f32, f32, f32, f32) {
+        return separate_to_rgba_f32(self.value);
+    }
+
     pub fn set_rgba(&mut self, r: u32, g: u32, b: u32, a: u32) {
         self.value = pack_to_argb(r, g, b, a);
     }
 
     pub fn set_rgb(&mut self, r: u32, g: u32, b: u32) {
         self.value = pack_to_argb(r, g, b, 255);
-    }
-
-    pub fn set_r(&mut self, value: u32) {
-        self.value = change_bytes(self.value, 2, value);
-    }
-
-    pub fn set_g(&mut self, value: u32) {
-        self.value = change_bytes(self.value, 1, value);
-    }
-
-    pub fn set_b(&mut self, value: u32) {
-        self.value = change_bytes(self.value, 0, value);
-    }
-
-    pub fn set_a(&mut self, value: u32) {
-        self.value = change_bytes(self.value, 3, value);
     }
 }
 
@@ -151,19 +133,23 @@ fn color_set_blue(color: Color, value: u32) -> Color {
 #[inline(always)]
 fn color_set_alpha(color: Color, value: u32) -> Color {
     let new_value = change_bytes(color.value, 3, value);
+
+    // let shift = value << 24;
+    // let mask = 0xFF << shift;
+    // let new_value = (!mask & color.value) | shift;
+
     Color::from_u32(new_value)
 }
 
 #[inline(always)]
 fn color_set_alpha_f64(color: Color, alpha: f64) -> Color {
     let a = (alpha * 255.0) as u32;
-    let new_value = change_bytes(color.value, 3, a);
-    Color::from_u32(new_value)
+    color_set_alpha(color, a)
 }
 
 #[inline(always)]
 fn pack_to_argb(r: u32, g: u32, b: u32, a: u32) -> u32 {
-    ((a as u32) << 24) | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32)
+    (a << 24) | (r << 16) | (g << 8) | (b << 0)
 }
 
 #[inline(always)]
@@ -210,10 +196,11 @@ fn create_vectical_gradient(
     let mut b_new = b_s as f64;
 
     for x in 0..width {
-        let color = Color::from_rgb(
+        let color = Color::from_rgba(
             round_f64_u32(r_new),
             round_f64_u32(g_new),
             round_f64_u32(b_new),
+            255,
         );
         for y in 0..height {
             let offset = get_index(x, y, width);
@@ -354,70 +341,96 @@ fn plot_point(x: i32, y: i32, width: i32, color: Color, data: &mut [Color]) {
         return;
     }
 
-    let dest_pixel = &mut data[pixel_index].value;
+    let dest_pixel = &mut data[pixel_index];
 
-    let (s_r, s_g, s_b, s_a) = separate_to_rgba_f32(color.value);
-    let (d_r, d_g, d_b, mut d_a) = separate_to_rgba_f32(*dest_pixel);
+    let (s_r, s_g, s_b, s_a) = color.separate_f32();
+    let (d_r, d_g, d_b, d_a) = (*dest_pixel).separate_f32();
 
-    d_a *= 1.0 - s_a;
+    //d_a = 1.0 - s_a;
 
     let source_alpha_wide = f32x4::new(s_a, s_a, s_a, s_a);
-    let dest_alpha_wide = f32x4::new(d_a, d_a, d_a, d_a);
+    let mut source_wide = f32x4::new(s_r, s_g, s_b, s_a);
+    source_wide = source_wide * source_alpha_wide;
 
-    let dest_wide = f32x4::new(d_r, d_g, d_b, d_a);
-    let source_wide = f32x4::new(s_r, s_g, s_b, s_a);
+    let mut dest_alpha_wide = f32x4::new(d_a, d_a, d_a, d_a);
+    let mut dest_wide = f32x4::new(d_r, d_g, d_b, d_a);
+    dest_wide = dest_wide * dest_alpha_wide;
 
-    let out_a = s_a + d_a;
-    let out_wide = source_wide * source_alpha_wide + dest_wide * dest_alpha_wide;
+    let wide1 = f32x4::new(1.0, 1.0, 1.0, 1.0);
+    dest_alpha_wide = wide1 - source_alpha_wide;
+
+    //let out_a = s_a + d_a;
+    //let out_wide = source_wide * source_alpha_wide + dest_wide * dest_alpha_wide;
+    let out_wide = source_wide + dest_wide * dest_alpha_wide;
+    let mut out_alpha_wide = source_alpha_wide + dest_alpha_wide;
+
     let wide255 = f32x4::new(255.0, 255.0, 255.0, 255.0);
 
     let result = wide255 * out_wide;
+    out_alpha_wide = out_alpha_wide * wide255;
 
     *dest_pixel = unsafe {
-        pack_to_argb(
+        Color::from_rgba(
             result.extract_unchecked(0) as u32,
             result.extract_unchecked(1) as u32,
             result.extract_unchecked(2) as u32,
-            (255.0 * out_a) as u32,
+            out_alpha_wide.extract_unchecked(3) as u32,
         )
     };
 }
 
-fn plot_square(pos0: &Vector2, pos1: &Vector2, width: i32, color: Color, data: &mut [Color]) {
-    let (x0, y0) = (pos0.x, pos0.y);
-    let (x1, y1) = (pos1.x, pos1.y);
+fn plot_line(start: &Vector2, end: &Vector2, width: i32, color: Color, data: &mut [Color]) {
+    //let new_color = color_set_alpha_f64(color, 0.5);
 
-    plot_line(
-        &Vector2::new(x0, y0),
-        &Vector2::new(x0, y1),
-        width,
-        color,
-        data,
-    );
-    plot_line(
-        &Vector2::new(x0, y1),
-        &Vector2::new(x1, y1),
-        width,
-        color,
-        data,
-    );
-    plot_line(
-        &Vector2::new(x1, y1),
-        &Vector2::new(x1, y0),
-        width,
-        color,
-        data,
-    );
-    plot_line(
-        &Vector2::new(x1, y0),
-        &Vector2::new(x0, y0),
-        width,
-        color,
-        data,
-    );
+    //let (r, g, b, mut a) = separate_to_rgba(color.value);
+    //a /= 2;
+    //let new_color = Color::from_rgba(r, g, b, a);
+
+    //let new_color = color_set_alpha(color, 127);
+    //let new_color = Color::from_u32(0xFF220000);
+    //plot_line_dda(start, end, width, new_color, data);
+    //plot_line_fast(start, end, width, new_color, data);
+    //plot_line_dda(start, end, width, color, data);
+
+    plot_line_fast(start, end, width, color, data);
 }
 
-fn plot_line(pos0: &Vector2, pos1: &Vector2, width: i32, color: Color, data: &mut [Color]) {
+fn plot_line_dda(pos0: &Vector2, pos1: &Vector2, width: i32, color: Color, data: &mut [Color]) {
+    let x1 = truncate_f64_i32(pos0.x);
+    let y1 = truncate_f64_i32(pos0.y);
+    let x2 = truncate_f64_i32(pos1.x);
+    let y2 = truncate_f64_i32(pos1.y);
+
+    let x2_x1 = x2 - x1;
+    let y2_y1 = y2 - y1;
+
+    let length = if y2_y1.abs() > x2_x1.abs() {
+        y2_y1.abs()
+    } else {
+        x2_x1.abs()
+    };
+
+    let xincrement = x2_x1 as f64 / length as f64;
+    let yincrement = y2_y1 as f64 / length as f64;
+
+    let mut x = 0.5 + x1 as f64;
+    let mut y = 0.5 + y1 as f64;
+
+    let mut i = 1;
+    while i <= length {
+        //plot_point
+        //let pixel_index = get_index(x as i32, y as i32, width);
+        //data[pixel_index].value = color.value;
+
+        plot_point(x as i32, y as i32, width, color, data);
+
+        x = x + xincrement;
+        y = y + yincrement;
+        i += 1;
+    }
+}
+
+fn plot_line_fast(pos0: &Vector2, pos1: &Vector2, width: i32, color: Color, data: &mut [Color]) {
     use std::mem;
 
     let x1 = truncate_f64_i32(pos0.x);
@@ -429,7 +442,7 @@ fn plot_line(pos0: &Vector2, pos1: &Vector2, width: i32, color: Color, data: &mu
     let mut short_len = y2 - y1;
     let mut long_len = x2 - x1;
 
-    if abs_i32(short_len) > abs_i32(long_len) {
+    if short_len.abs() > long_len.abs() {
         mem::swap(&mut short_len, &mut long_len);
         y_longer = true;
     }
@@ -464,14 +477,21 @@ fn plot_line(pos0: &Vector2, pos1: &Vector2, width: i32, color: Color, data: &mu
             y = y1 + (j >> 16);
         }
 
-        let pixel_index = (x + width * y) as usize;
-        data[pixel_index].value = color.value;
+        plot_point(x, y, width, color, data);
+        //let pixel_index = get_index(x, y, width);
+        //data[pixel_index].value = color.value;
         j += dec_inc;
         i += increment_val;
     }
 }
 
-fn plot_line_vec2(pos0: &Vector2, pos1: &Vector2, width: i32, color: Color, data: &mut [Color]) {
+fn plot_line_fast_f64(
+    pos0: &Vector2,
+    pos1: &Vector2,
+    width: i32,
+    color: Color,
+    data: &mut [Color],
+) {
     use std::mem;
 
     let x1 = pos0.x;
@@ -521,6 +541,40 @@ fn plot_line_vec2(pos0: &Vector2, pos1: &Vector2, width: i32, color: Color, data
     }
 }
 
+fn plot_square(pos0: &Vector2, pos1: &Vector2, width: i32, color: Color, data: &mut [Color]) {
+    let (x0, y0) = (pos0.x, pos0.y);
+    let (x1, y1) = (pos1.x, pos1.y);
+
+    plot_line(
+        &Vector2::new(x0, y0),
+        &Vector2::new(x0, y1),
+        width,
+        color,
+        data,
+    );
+    plot_line(
+        &Vector2::new(x0, y1),
+        &Vector2::new(x1, y1),
+        width,
+        color,
+        data,
+    );
+    plot_line(
+        &Vector2::new(x1, y1),
+        &Vector2::new(x1, y0),
+        width,
+        color,
+        data,
+    );
+    plot_line(
+        &Vector2::new(x1, y0),
+        &Vector2::new(x0, y0),
+        width,
+        color,
+        data,
+    );
+}
+
 impl Sprite {
     pub fn new(position: Vector2, width: i32, height: i32, layer: LayerID) -> Sprite {
         Sprite {
@@ -554,7 +608,14 @@ impl Image {
         }
     }
 
-    pub fn waveform(width: i32, height: i32, wave: &Waveform, color: Color) -> Image {
+    pub fn waveform(
+        width: i32,
+        height: i32,
+        wave: &Waveform,
+        start: u32,
+        range: u32,
+        color: Color,
+    ) -> Image {
         let center_y = height / 2;
 
         let color_empty = Color::from_u32(Colors::Empty as u32);
@@ -562,20 +623,20 @@ impl Image {
 
         let half_height = height as f64 / 2.0;
 
-        let mut array_len = wave.sample_count;
-        let mut pts: Vec<Vector2> = Vec::with_capacity(array_len);
-        for i in 0..array_len {
-            let x = (i as f64 / array_len as f64) * width as f64;
-            let y = center_y as f64 + wave.samples[i] * half_height;
-            pts.push(Vector2::new(x, y));
-        }
+        let end = (start + range) as usize;
 
-        array_len = pts.len();
-        let mut last_position = pts[0];
+        let len = wave.points.len();
+        let mut last_position = Vector2::new(0.0, center_y as f64 + wave.points[0].y * half_height);
 
-        for i in 1..array_len {
-            plot_line(&last_position, &pts[i], width, color, &mut data);
-            last_position = pts[i];
+        let mut index = 0;
+        for i in start as usize..end {
+            let position = Vector2::new(
+                index as f64 / range as f64 * width as f64,
+                center_y as f64 + wave.points[i].y * half_height,
+            );
+            plot_line(&last_position, &position, width, color, &mut data);
+            last_position = position;
+            index += 1;
         }
         Image::from_data(width, height, data)
     }
@@ -734,21 +795,5 @@ impl Image {
                 }
             }
         }
-
-        plot_square(
-            &Vector2::new_i32(x, y),
-            &Vector2::new_i32(end_x, end_y),
-            self_width,
-            color,
-            data,
-        );
-
-        plot_square(
-            &Vector2::new_i32(x + 3, y + 3),
-            &Vector2::new_i32(end_x - 3, end_y - 3),
-            self_width,
-            color,
-            data,
-        );
     }
 }
