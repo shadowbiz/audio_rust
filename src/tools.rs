@@ -119,3 +119,11 @@ pub fn read_file() -> Vec<u8> {
     f.read_to_end(&mut data).expect("Unable to read data");
     data
 }
+
+pub fn db_to_volume(db: f64) -> f64 {
+    (0.05 * db).powf(10.0)
+}
+
+pub fn volume_to_db(volume: f64) -> f64 {
+    20.0 * volume.log10()
+}

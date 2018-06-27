@@ -625,7 +625,7 @@ impl Image {
 
         let end = (start + range) as usize;
 
-        let len = wave.points.len();
+        //let len = wave.points.len();
         let mut last_position = Vector2::new(0.0, center_y as f64 + wave.points[0].y * half_height);
 
         let mut index = 0;
