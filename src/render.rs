@@ -1,7 +1,10 @@
+#![cfg_attr(stdsimd_strict, deny(warnings))]
+#![feature(stdsimd)]
 #![allow(dead_code)]
 
-extern crate coresimd;
-use coresimd::simd::*;
+extern crate stdsimd;
+
+use stdsimd::simd::*;
 
 use random::*;
 use audio::*;

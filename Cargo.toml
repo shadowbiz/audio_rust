@@ -10,7 +10,8 @@ user32-sys = "*"
 winmm-sys = "*"
 ole32-sys = "*"
 gdi32-sys = "*"
-coresimd = "*"
+stdsimd = { git = "https://github.com/rust-lang-nursery/stdsimd.git" }
+## coresimd = "*"
 
 ## 
 ## 

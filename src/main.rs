@@ -1,6 +1,8 @@
+#![feature(stdsimd)]
 #![feature(asm)]
 
-extern crate coresimd;
+extern crate stdsimd;
+
 extern crate gdi32;
 extern crate kernel32;
 extern crate user32;
