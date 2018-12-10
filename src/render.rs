@@ -79,8 +79,9 @@ pub struct BitmapHeader {
 //#[inline(always)]
 //fn rgba_from_u32(color: u32) -> (u8, u8, u8, u8) {}
 
+/// AARRGGBB
 impl Color {
-    /// AARRGGBB
+    
     pub fn random() -> Self {
         let (r, g, b, _) = separate_to_rgba(random_u32());
         Color {

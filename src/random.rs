@@ -42,8 +42,8 @@ impl Random {
             self.pink_key = 0;
         }
 
-        // Exclusive-Or previous value with current value. This gives
-        // a list of bits that have changed.
+        // Exclusive-Or previous value with current value. 
+        // This gives a list of bits that have changed.
         let diff = last_key ^ self.pink_key;
         sum = 0;
         for i in 0..5 {
